@@ -256,6 +256,19 @@ body.photo #hud,body.photo #touch,body.photo #quit,body.photo #helpRace,body.pho
 #hsTable td,.rec td{padding:3px 4px}
 #hsTable tr.me{color:var(--signal);font-weight:700}
 #results .card{max-height:calc(100vh - 32px);overflow:auto}
+#mpRes{position:fixed;inset:0;display:grid;place-items:center;z-index:9;background:rgba(5,8,16,.55);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+#mpRes[hidden],#mpBar[hidden]{display:none}
+#mpRes .card{background:var(--night);border:1px solid var(--line);border-radius:12px;padding:22px;width:min(420px,100%);box-sizing:border-box;max-height:calc(100vh - 32px);overflow:auto}
+#mpRes h2{margin:0 0 4px;font-family:var(--display);font-weight:800;font-style:italic;font-size:40px;color:var(--signal)}
+#mpRes table{width:100%;border-collapse:collapse;margin:12px 0 16px;font-variant-numeric:tabular-nums}
+#mpRes td{padding:6px 4px;border-bottom:1px solid var(--line);font-size:14px}
+#mpRes td:last-child{text-align:right}
+#mpRes tr.me td{color:var(--signal);font-weight:600}
+#mpRes .btn{padding:10px}
+#mpNote{color:var(--mute);font-size:12px;margin-top:10px}
+#mpBar{position:fixed;left:50%;transform:translateX(-50%);top:calc(12px + env(safe-area-inset-top,0px));z-index:8;background:rgba(13,18,32,.85);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font-size:13px;max-width:calc(100vw - 32px);box-sizing:border-box}
+#mpBar .tag{color:var(--signal);font-weight:600;margin-right:6px}
+
 .daily{display:flex;flex-direction:column;gap:4px;margin-top:10px}
 .daily .hint{margin:0}
 #recWrap{margin-top:10px;font-size:13px}
@@ -423,6 +436,21 @@ body.touchmode #keys{display:none}
       <button class="btn primary" id="shareBtn" style="padding:10px">Share score</button>
       <button class="btn" id="editBtn" style="padding:10px">Edit course</button>
     </div>
+  </div>
+</div>
+
+<div id="mpBar" hidden><span class="tag">Online</span><span id="mpBarText"></span></div>
+<div id="mpRes" hidden role="dialog" aria-labelledby="mpTitle">
+  <div class="card">
+    <h2 id="mpTitle">Finished</h2>
+    <div id="mpSub" style="color:var(--mute);font-size:14px"></div>
+    <table id="mpTable"></table>
+    <div class="row">
+      <button class="btn primary" id="mpLobby">Back to the lobby</button>
+      <button class="btn" id="mpNext" hidden>Next race on my course</button>
+      <button class="btn" id="mpSolo">Play single player</button>
+    </div>
+    <div id="mpNote"></div>
   </div>
 </div>
 
@@ -1797,7 +1825,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyR' && player && mode === 'race' && player.crashed <= 0) { player.crashed = 0.01; }
   if (e.code === 'KeyM') toggleSound();
   if (e.code === 'KeyP' && RACE.mode === 'free' && mode === 'race' && !startReplay()) toast('Land a few stunts first, then press P to watch them');
-  if (e.code === 'Escape') toEditor();
+  if (e.code === 'Escape') MP ? MP.quit() : toEditor();
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.code] = false; stale[e.code] = false; });
@@ -2050,21 +2078,23 @@ function startRace(opts = {}) {
   initAudio(); if (AC && AC.state === 'suspended') AC.resume();
   for (const r of riders) scene.remove(r.mesh.root);
   if (arenaGroup) { disposeGroup(arenaGroup); arenaGroup = null; }
-  if ($('modeSel').value === 'free') return startFree();
-  const m = RACE.mode = $('modeSel').value;
+  if (!MP && $('modeSel').value === 'free') return startFree();
+  const m = RACE.mode = MP ? 'race' : $('modeSel').value;
+  if (MP) RACE.daily = null;
   if (m === 'tour' && (opts.newTour || !RACE.tour)) RACE.tour = { i: 0, pts: {}, done: false };
   if (m === 'tour' && opts.next) RACE.tour.i++;
   if (m === 'tour') { const n = TOUR[RACE.tour.i]; RACE.name = n; RACE.pieces = PRESETS[n](); RACE.theme = PRESET_THEME[n]; }
   else if (m === 'drag') { RACE.name = 'Drag strip'; RACE.pieces = [{ t: 'straight', p: { len: 400 } }]; RACE.theme = course.theme; }
+  else if (MP) { RACE.name = MP.race.name; RACE.pieces = MP.race.pieces; RACE.theme = MP.race.theme; }
   else if (RACE.daily) { RACE.name = RACE.daily.name; RACE.pieces = RACE.daily.pieces; RACE.theme = RACE.daily.theme; }
   else { RACE.name = course.name; RACE.pieces = course.pieces; RACE.theme = course.theme; }
   RACE.score = 0; RACE.launch = 0; REC.t = []; REC.f = []; REC.stunts = []; REC.acc = 0;
   applyTheme(RACE.theme); TR = buildTrack(RACE.pieces); renderTrack();
   if (hlMesh) hlMesh.visible = false; if (endMarker) endMarker.visible = false;
   let n = 1 + (+$('oppCount').value), skill = +$('diffSel').value;
-  if (m === 'stunt') n = 1; if (m === 'drag') { n = 2; skill = 1; } if (m === 'tour') n = Math.max(4, n);
+  if (m === 'stunt') n = 1; if (m === 'drag') { n = 2; skill = 1; } if (m === 'tour') n = Math.max(4, n); if (MP) n = 1;
   const slots = m === 'drag' ? [[17, -2.6], [17, 2.6]] : [[17, -3.2], [17, 0], [17, 3.2], [11, -3.2], [11, 0], [11, 3.2]];
-  const order = m === 'drag' ? [0, 1] : m === 'stunt' ? [1] : [4, 0, 1, 2, 3, 5]; // player starts mid back row
+  const order = m === 'drag' ? [0, 1] : m === 'stunt' ? [1] : MP ? [MP.slot()] : [4, 0, 1, 2, 3, 5]; // player starts mid back row
   const mine = $('animalSel').value, kinds = [mine, ...ANIMAL_ORDER.filter(k => k !== mine)];
   riders = [];
   for (let i = 0; i < n; i++) {
@@ -2078,7 +2108,7 @@ function startRace(opts = {}) {
   document.body.dataset.mode = m;
   if (m === 'tour') toast(`Tournament race ${RACE.tour.i + 1} of 3: ${RACE.name}`);
   scene.fog.near = 120; scene.fog.far = 720;
-  mode = 'countdown'; countdown = 3.2; raceT = 0; resultsShown = false; finishWait = 0;
+  mode = 'countdown'; countdown = MP ? MP.countdown() : 3.2; raceT = 0; resultsShown = false; finishWait = 0;
   $('editor').hidden = true; $('viewhint').hidden = true; $('adBanner').hidden = true; $('hud').hidden = false; $('quit').hidden = false; $('results').hidden = true; $('helpRace').hidden = false;
   const touchy = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
   document.body.classList.toggle('touchmode', touchy); applyControls(touchy);
@@ -2117,6 +2147,7 @@ function updateHud(dt) {
   $('fuel').firstChild.style.width = (player.fuel * 100).toFixed(0) + '%';
   const dots = $('prog').children;
   riders.forEach((r, i) => { dots[i].style.left = (clamp(r.s / TR.finishS, 0, 1) * 100) + '%'; dots[i].style.zIndex = r.isPlayer ? 2 : 1; });
+  if (MP) MP.hud();
   drawMini();
   if (msgT > 0) { msgT -= dt; if (msgT <= 0) $('msg').textContent = ''; }
   if (trickT > 0) { trickT -= dt; if (trickT <= 0) $('trick').style.opacity = 0; }
@@ -2148,7 +2179,7 @@ function drawMini() {
   g.fillStyle = '#ff5b2e';
   for (const o of TR.obstacles) { const p = S[o.idx].p, q = p.clone().addScaledVector(S[o.idx].R, o.lat), [x, y] = tx(q.x, q.z); g.beginPath(); g.arc(x, y, 3.5, 0, TAU); g.fill(); }
   { const f = S[TR.finishIdx], [x, y] = tx(f.p.x, f.p.z); g.fillStyle = '#fff'; g.fillRect(x - 7, y - 7, 14, 14); g.fillStyle = '#111'; g.fillRect(x - 7, y - 7, 7, 7); g.fillRect(x, y, 7, 7); }
-  for (const r of riders) {
+  for (const r of MP ? riders.concat(MP.dots()) : riders) {
     if (r === player) continue; const [x, y] = tx(r.pos.x, r.pos.z);
     g.fillStyle = '#' + r.color.toString(16).padStart(6, '0'); g.strokeStyle = '#0d1220'; g.lineWidth = 3;
     g.beginPath(); g.arc(x, y, 8, 0, TAU); g.fill(); g.stroke();
@@ -2198,6 +2229,7 @@ function buildResults() {
   extrasResults();
 }
 function showResults() {
+  if (MP) { resultsShown = true; return MP.showPanel(); }
   resultsShown = true; buildResults();
   if (!startReplay()) $('results').hidden = false;
 }
@@ -2207,7 +2239,7 @@ $('rpSkip').onclick = () => endReplay();
 $('rpBtn').onclick = () => { if (RACE.mode === 'free' && mode === 'race' && !startReplay()) toast('Land a few stunts first, then watch them here'); $('rpBtn').blur(); };
 $('rpCam').onclick = () => { if (RP) setShot(RP.shot + 1); };
 $('editBtn').onclick = () => toEditor();
-$('quit').onclick = () => toEditor();
+$('quit').onclick = () => MP ? MP.quit() : toEditor();
 
 function stepRace(dt) {
   if (mode === 'countdown') {
@@ -2236,7 +2268,7 @@ function stepRace(dt) {
       if (r.air) stepAir(r, inp, h); else stepGround(r, inp, h);
       if (!r.finished && r.s >= TR.finishS) {
         r.finished = true; r.finishT = raceT;
-        if (r.isPlayer) { const pi = ranking().indexOf(r) + 1; TUT.ev('finish', { place: pi }); flash(pi === 1 ? 'WINNER!' : ord(pi) + '!', '#7be36b', 2); finishWait = 2.2; }
+        if (r.isPlayer) { const pi = MP ? MP.finished() : ranking().indexOf(r) + 1; TUT.ev('finish', { place: pi }); flash(pi === 1 ? 'WINNER!' : ord(pi) + '!', '#7be36b', 2); finishWait = 2.2; }
       }
       if (r.s > TR.endS - 4) { r.s = TR.endS - 4; r.speed = 0; }
     }
@@ -2326,7 +2358,7 @@ function b64ToF32(b) { const s = atob(b), u = new Uint8Array(s.length); for (let
 function ghostLoad() {
   GH.best = null; GH.cur = []; XO.splitT = []; XO.splitI = 0;
   if (GH.mesh) { scene.remove(GH.mesh.root); GH.mesh = null; }
-  if (!timed()) return;
+  if (!timed() || MP) return;
   const g = store.get(ghostKey(), null);
   if (g && g.d && g.n === GH.N) try { GH.best = { t: g.t, splits: g.splits || [], a: g.a, b: g.b, f: b64ToF32(g.d) }; } catch (e) { GH.best = null; }
   if (GH.best && XO.ghost) {
@@ -3698,6 +3730,258 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyH' && !typing && mode !== 'replay') { e.stopImmediatePropagation(); openHelp(); }
 }, true);
 
+/* ================= Online races =================
+   Only runs when the game hub opens this page with #hub=<origin>&room=<code>&token=<token>.
+   Each player rides their own bike here; the others show up as live ghost riders, and the hub
+   times the race on its own clock. Without that fragment none of this runs: single player is
+   exactly as before. */
+const MP_HUB = (() => { try { return new URLSearchParams(location.hash.slice(1)).get('hub'); } catch (e) { return null; } })();
+// The page loads the hub's client code, so it only trusts these hubs (plus a hub on this computer for testing).
+const HUB_ORIGINS = ['https://game-hub.rocketframe.workers.dev', 'https://game-hub-staging.rocketframe.workers.dev'];
+function hubAllowed(o) {
+  try {
+    const u = new URL(o);
+    if (u.origin !== String(o).replace(/\/$/, '')) return false;
+    return HUB_ORIGINS.includes(u.origin) || (/^(localhost|127\.0\.0\.1)$/.test(u.hostname) && (u.protocol === 'http:' || u.protocol === 'https:'));
+  } catch (e) { return false; }
+}
+const MPX = {
+  MIN_FACTOR: 0.7,          // fastest believable time = 70 % of par (par = a flawless AI run, the gold medal time)
+  LANES: [4, 0, 1, 2, 3, 5], // grid slots by start order, same as single player
+  SEND_HZ: 15, DELAY: 130,  // position updates per second; ghosts are drawn this many ms in the past
+  DEFAULT: 'Sunset Starter',
+};
+let MP = null;
+
+// Course pieces repeated once per lap (courses are point to point, so a lap is one more run of the course).
+function lapPieces(pieces, laps) { const out = []; for (let i = 0; i < laps; i++) for (const pc of pieces) out.push({ t: pc.t, p: { ...pc.p } }); return out; }
+// Rebuild a course from the room so bad numbers can't hang the track builder.
+function cleanCourse(c) {
+  if (!c || !Array.isArray(c.pieces) || !c.pieces.length || c.pieces.length > 120) return null;
+  const pieces = [];
+  for (const raw of c.pieces) {
+    if (!raw || !PIECES[raw.t]) return null;
+    const pc = newPiece(raw.t), def = PIECES[raw.t].params;
+    for (const k in def) { const v = Number(raw.p && raw.p[k]); if (Number.isFinite(v)) pc.p[k] = clamp(v, def[k][1], def[k][2]); }
+    if ('seed' in pc.p) pc.p.seed = Number.isFinite(Number(raw.p && raw.p.seed)) ? Number(raw.p.seed) | 0 : 1;
+    pieces.push(pc);
+  }
+  return { name: String(c.name || 'Custom course').slice(0, 40), theme: THEMES[c.theme] ? c.theme : 'desert', pieces };
+}
+function defaultCourse() { return { name: MPX.DEFAULT, theme: PRESET_THEME[MPX.DEFAULT], pieces: PRESETS[MPX.DEFAULT]() }; }
+// Par time of any piece list, without touching the track on screen.
+function parFor(pieces) {
+  const keepTR = TR, keepP = RACE.pieces;
+  try { RACE.pieces = pieces; TR = buildTrack(pieces); return parTime(); } finally { TR = keepTR; RACE.pieces = keepP; }
+}
+const minMsFor = (pieces, laps) => Math.floor(parFor(lapPieces(pieces, laps)) * 1000 * MPX.MIN_FACTOR);
+
+function nameTag(text, color) {
+  const tex = canvasTex(256, 64, (g, w, h) => {
+    g.font = '600 30px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const tw = Math.min(w - 8, g.measureText(text).width + 28);
+    g.fillStyle = 'rgba(13,18,32,.75)'; g.beginPath(); g.roundRect ? g.roundRect((w - tw) / 2, 8, tw, h - 16, 12) : g.rect((w - tw) / 2, 8, tw, h - 16); g.fill();
+    g.fillStyle = '#' + color.toString(16).padStart(6, '0'); g.fillRect((w - tw) / 2 + 10, h / 2 - 5, 10, 10);
+    g.fillStyle = '#fff'; g.fillText(text, w / 2 + 8, h / 2 + 1, w - 40);
+  });
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false, transparent: true }));
+  sp.scale.set(2.4, 0.6, 1); sp.position.set(0, 2.5, 0); sp.renderOrder = 3; return sp;
+}
+
+async function mpInit() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  const fallback = msg => { toast(msg); $('mpBar').hidden = true; MP = null; };
+  if (!hubAllowed(MP_HUB)) return fallback('That game link points at an unknown server. Playing single player.');
+  $('mpBar').hidden = false; $('mpBarText').textContent = 'Connecting to room ' + (p.get('room') || '') + '…';
+  let Hub;
+  try { ({ Hub } = await import(new URL(MP_HUB).origin + '/hub-client.js')); } catch (e) { return fallback('Could not reach the game server. Playing single player.'); }
+  const hub = Hub.fromLaunch();
+  if (!hub || !hub.launch.room) return fallback('That game link is incomplete. Playing single player.');
+  const room = hub.joinRoom(hub.launch.room);
+  const lobbyUrl = hub.origin + '/?room=' + encodeURIComponent(room.code);
+  const others = new Map(); // pid -> { name, mesh, kind, btype, buf, s, pos, color, finishMs, dnf, why }
+  const S = { race: null, startAt: 0, grid: [], me: null, sendAcc: 0, myMs: null, myDnf: false, result: null, quitArm: 0, phase: 'waiting', minMs: 0 };
+  const nameOf = id => (room.room && room.room.players.find(q => q.id === id) || {}).name || 'Rider';
+  const meId = () => (room.you && room.you.id) || (hub.user && hub.user.id);
+  const now = () => room.serverNow();
+
+  function other(pid) {
+    let o = others.get(pid);
+    if (!o) { o = { pid, name: nameOf(pid), mesh: null, code: -1, buf: [], s: 0, pos: new V3(), color: 0xffffff, finishMs: null, dnf: false, why: '' }; others.set(pid, o); }
+    return o;
+  }
+  function dropMeshes() { for (const o of others.values()) if (o.mesh) { scene.remove(o.mesh.root); o.mesh = null; o.code = -1; } }
+  function ghostMesh(o, code) {
+    if (o.mesh && o.code === code) return;
+    if (o.mesh) scene.remove(o.mesh.root);
+    const kind = ANIMAL_ORDER[(code >> 3) % ANIMAL_ORDER.length] || 'fox', btype = BIKE_ORDER[(code & 7) % BIKE_ORDER.length] || 'cross';
+    const m = makeBike(ANIMALS[kind].color, kind, btype);
+    m.root.traverse(x => { if (x.isMesh) { x.castShadow = false; x.material = x.material.clone(); x.material.transparent = true; x.material.opacity = 0.6; x.material.depthWrite = false; } });
+    o.color = ANIMALS[kind].color; o.name = nameOf(o.pid);
+    m.root.add(nameTag(o.name, o.color));
+    scene.add(m.root); o.mesh = m; o.code = code;
+  }
+  const qa = new Q4(), qb = new Q4();
+  function poseGhost(o, t) {
+    const B = o.buf; if (!o.mesh || !B.length) return;
+    let i = B.length - 1; while (i > 0 && B[i].t > t) i--;
+    const A = B[i], C = B[Math.min(B.length - 1, i + 1)], u = C === A ? 0 : clamp((t - A.t) / (C.t - A.t), 0, 1), a = A.s, b = C.s;
+    const L = k => a[k] + (b[k] - a[k]) * u, m = o.mesh;
+    m.root.position.set(L(0), L(1), L(2)); qa.set(a[3], a[4], a[5], a[6]); qb.set(b[3], b[4], b[5], b[6]); m.root.quaternion.slerpQuaternions(qa, qb, u);
+    m.body.rotation.x = L(7); m.body.rotation.z = L(8); m.bike.rotation.y = Math.abs(b[9] - a[9]) > 3 ? b[9] : L(9); m.rider.rotation.x = L(10);
+    m.body.position.y = L(11); m.body.position.z = L(12); m.rider.rotation.z = L(13); solveRig(m);
+    o.s = L(15); o.pos.copy(m.root.position); m.wheels.forEach(w => w.rotation.x = o.s * 3);
+  }
+  function capture() {
+    const m = player.mesh, q = m.root.quaternion, code = ANIMAL_ORDER.indexOf(player.kind) * 8 + BIKE_ORDER.indexOf(player.btype);
+    return [m.root.position.x, m.root.position.y, m.root.position.z, q.x, q.y, q.z, q.w, m.body.rotation.x, m.body.rotation.z, m.bike.rotation.y,
+      m.rider.rotation.x, m.body.position.y, m.body.position.z, m.rider.rotation.z, code, player.s].map(v => Math.round(v * 1000) / 1000);
+  }
+  // Standings: finishers by time, then riders still going by distance, then retirements.
+  function standings() {
+    const me = { pid: meId(), name: 'You', me: true, s: player ? player.s : 0, finishMs: S.myMs, dnf: S.myDnf, why: S.myDnf ? 'retired' : '', color: player ? player.color : 0xffffff };
+    const all = [me, ...[...others.values()].filter(o => S.grid.includes(o.pid))];
+    const k = o => o.finishMs != null ? 0 : o.dnf ? 2 : 1;
+    return all.sort((a, b) => k(a) - k(b) || (k(a) === 0 ? a.finishMs - b.finishMs : b.s - a.s));
+  }
+  const place = () => standings().findIndex(o => o.me) + 1;
+
+  function startFrom(m) {
+    if (m.resume && S.race && m.startAt === S.startAt) { // reconnected mid-race: keep riding, just catch up on results
+      for (const [pid, ms] of Object.entries(m.finish || {})) if (pid !== S.me) other(pid).finishMs = ms;
+      for (const pid of Object.keys(m.dnf || {})) if (pid !== S.me) other(pid).dnf = true;
+      return;
+    }
+    const c = cleanCourse(m.course) || defaultCourse(), laps = clamp(Math.round(m.laps) || 1, 1, 5);
+    S.race = { name: c.name + (laps > 1 ? ' · ' + laps + ' laps' : ''), theme: c.theme, pieces: lapPieces(c.pieces, laps) };
+    S.startAt = m.startAt; S.grid = Array.isArray(m.grid) ? m.grid : []; S.me = meId(); S.result = null; S.quitArm = 0;
+    S.myMs = m.finish && m.finish[S.me] != null ? m.finish[S.me] : null; S.myDnf = !!(m.dnf && m.dnf[S.me]);
+    dropMeshes(); others.clear();
+    for (const pid of S.grid) if (pid !== S.me) { const o = other(pid); if (m.finish && m.finish[pid] != null) o.finishMs = m.finish[pid]; if (m.dnf && m.dnf[pid]) o.dnf = true; }
+    if (mode === 'replay') endReplay(true);
+    if (mode === 'photo') exitPhoto();
+    if (HELP.open) closeHelp();
+    if (TUT.on) tutExit();
+    $('mpRes').hidden = true; $('share').hidden = true; $('results').hidden = true;
+    startRace();
+    $('quit').textContent = 'Retire (Esc)';
+    $('mpBar').hidden = true;
+    if (S.myMs != null || S.myDnf) { player.finished = true; player.finishT = (S.myMs || 0) / 1000; resultsShown = true; MP.showPanel(); }
+  }
+
+  room.on('room', () => {
+    S.phase = room.room.phase;
+    for (const o of others.values()) o.name = nameOf(o.pid);
+    if (!S.race) $('mpBarText').textContent = S.phase === 'playing' ? 'Joining the race…' : 'Room ' + room.code + ' · waiting for the host to start';
+    if (!$('mpRes').hidden) MP.renderPanel();
+  });
+  room.on('game', m => {
+    if (m.k === 'start') return startFrom(m);
+    if (m.k === 'pos' && m.pid !== meId() && Array.isArray(m.s) && m.s.length >= 16 && S.race) {
+      const o = other(m.pid); ghostMesh(o, m.s[14] | 0);
+      o.buf.push({ t: performance.now(), s: m.s }); if (o.buf.length > 12) o.buf.shift();
+      return;
+    }
+    if (m.k === 'finished') {
+      if (m.pid === meId()) { S.myMs = m.ms; if (player) player.finishT = m.ms / 1000; }
+      else { const o = other(m.pid); o.finishMs = m.ms; flash(o.name + ' finished', '#3fe3ff', 1.2); }
+    }
+    if (m.k === 'dnf') {
+      if (m.pid === meId()) { S.myDnf = true; S.myMs = null; if (m.why === 'time rejected') toast('The server did not accept that time.'); }
+      else { const o = other(m.pid); o.dnf = true; o.why = m.why || ''; }
+    }
+    if (!$('mpRes').hidden) MP.renderPanel();
+  });
+  room.on('result', m => { S.result = m.result; if (resultsShown) MP.showPanel(); else MP.renderPanel(); });
+  room.on('fail', () => { if (!S.race) fallback('Could not join that room. Playing single player.'); else toast('Lost the connection to the room.'); });
+  room.on('removed', () => toast('You were removed from the room.'));
+  room.on('error', m => { if (m && m.msg) toast(m.msg); });
+
+  MP = {
+    get race() { return S.race; },
+    slot() { const i = Math.max(0, S.grid.indexOf(S.me)); return MPX.LANES[i % MPX.LANES.length]; },
+    countdown() { return Math.max(0, (S.startAt - now()) / 1000); },
+    // keep the race clock on the server's clock, so the time on screen is the time that counts
+    preStep(dt) {
+      if (!S.race || !player) return;
+      if (mode === 'countdown') countdown = (S.startAt - now()) / 1000 + dt;
+      else if (mode === 'race' && !player.finished) raceT = Math.max(0, (now() - S.startAt) / 1000 - dt);
+    },
+    finished() {
+      const ms = Math.max(0, Math.round(now() - S.startAt));
+      S.myMs = ms; player.finishT = ms / 1000; raceT = player.finishT;
+      room.sendGame({ k: 'finish', ms });
+      return place();
+    },
+    tick(dt) {
+      if (!S.race) return;
+      if (player && (mode === 'countdown' || mode === 'race' || mode === 'rewind') && !S.myDnf) {
+        S.sendAcc += dt;
+        if (S.sendAcc >= 1 / MPX.SEND_HZ) { S.sendAcc = 0; room.sendGame({ k: 'pos', s: capture() }); }
+      }
+      const t = performance.now() - MPX.DELAY;
+      for (const o of others.values()) { poseGhost(o, t); if (o.mesh) o.mesh.root.visible = mode !== 'editor' && mode !== 'replay' && !o.dnf; }
+      if (S.quitArm > 0) S.quitArm -= dt;
+    },
+    hud() {
+      const st = standings(), pi = st.findIndex(o => o.me) + 1, o = ord(pi);
+      $('pos').innerHTML = `${pi}<sup>${o.slice(String(pi).length)}</sup><small>/${st.length}</small>`;
+      const prog = $('prog');
+      for (const g of others.values()) {
+        if (!g.dot) { g.dot = document.createElement('i'); }
+        if (g.dot.parentNode !== prog) prog.appendChild(g.dot);
+        g.dot.style.background = '#' + g.color.toString(16).padStart(6, '0');
+        g.dot.style.left = (clamp((g.finishMs != null ? TR.finishS : g.s) / TR.finishS, 0, 1) * 100) + '%'; g.dot.style.zIndex = 1;
+        g.dot.style.opacity = g.mesh && !g.dnf ? 1 : 0.25;
+      }
+    },
+    dots() { return [...others.values()].filter(o => o.mesh && !o.dnf); },
+    debug() { return { phase: S.phase, myMs: S.myMs, myDnf: S.myDnf, result: S.result, others: [...others.values()].map(o => ({ name: o.name, s: o.s, shown: !!(o.mesh && o.mesh.root.visible), finishMs: o.finishMs, dnf: o.dnf })) }; },
+    quit() {
+      if (!S.race || mode === 'editor') return;
+      if (player.finished || S.myDnf) return MP.showPanel();
+      if (S.quitArm <= 0) { S.quitArm = 3; toast('Press Esc or Retire again to leave this race'); return; }
+      S.myDnf = true; room.sendGame({ k: 'dnf' }); player.finished = true; resultsShown = true; MP.showPanel();
+    },
+    showPanel() { MP.renderPanel(); $('mpRes').hidden = false; $('quit').textContent = 'Results (Esc)'; },
+    renderPanel() {
+      if (!S.race) return;
+      const st = standings(), R = S.result, mine = st.findIndex(o => o.me) + 1;
+      const final = R && R.players ? Object.fromEntries(R.players.map(p => [p.id, p])) : null;
+      let title, sub;
+      if (final) {
+        const me = final[meId()] || {};
+        title = me.place ? (me.place === 1 ? 'You win!' : ord(me.place) + ' place') : me.flagged ? 'Time not accepted' : 'Did not finish';
+        sub = R.valid === false ? 'This race was not counted' + (R.reason ? ': ' + R.reason : '') + '.' : 'Final result, timed by the server.';
+      } else {
+        title = S.myDnf ? 'Retired' : S.myMs != null ? (mine === 1 ? 'You lead!' : ord(mine) + ' so far') : 'Racing…';
+        sub = S.myMs != null ? 'Your time ' + fmt(S.myMs / 1000) + ' · waiting for the others (the race closes 45 s after the first finisher)' : 'Waiting for the others to finish';
+      }
+      $('mpTitle').textContent = title; $('mpSub').textContent = sub;
+      const rows = final
+        ? R.players.slice().sort((a, b) => (a.place || 99) - (b.place || 99)).map(p => `<tr class="${p.id === meId() ? 'me' : ''}"><td>${p.place || '–'}</td><td>${esc(p.id === meId() ? 'You' : p.name)}</td><td>${p.score != null ? fmt(p.score / 1000) : p.flagged ? 'time rejected' : 'DNF'}</td></tr>`)
+        : st.map((o, i) => `<tr class="${o.me ? 'me' : ''}"><td>${o.finishMs != null ? i + 1 : '–'}</td><td><span class="dot" style="background:#${o.color.toString(16).padStart(6, '0')}"></span>${esc(o.name)}</td><td>${o.finishMs != null ? fmt(o.finishMs / 1000) : o.dnf ? (o.why === 'time rejected' ? 'time rejected' : o.why === 'left' ? 'left' : 'retired') : Math.max(0, Math.round(TR.finishS - o.s)) + ' m to go'}</td></tr>`);
+      $('mpTable').innerHTML = rows.join('');
+      const canSet = room.isHost && S.phase !== 'playing';
+      $('mpNext').hidden = !canSet; $('mpNext').textContent = 'Next race on my course: ' + course.name;
+      $('mpNote').textContent = canSet ? 'The lobby\'s Play again button starts the next race.' : '';
+    },
+  };
+  $('mpLobby').onclick = () => { location.href = lobbyUrl; };
+  $('mpSolo').onclick = () => {
+    room.close(); dropMeshes(); others.clear(); MP = null;
+    history.replaceState(null, '', location.pathname + location.search);
+    $('mpRes').hidden = true; $('quit').textContent = 'Back to builder (Esc)'; toEditor();
+  };
+  $('mpNext').onclick = () => {
+    const laps = (room.room && room.room.opts && room.room.opts.laps) || 1, c = cleanCourse(course);
+    if (!c) return toast('This course cannot be raced online.');
+    const minMs = minMsFor(c.pieces, laps);
+    room.setOptions({ ...room.room.opts, _course: c, courseName: c.name, minMs });
+    toast('Next race: ' + c.name + '. Head back to the lobby to start it.');
+  };
+}
+
 /* ================= Main loop ================= */
 function resize() {
   const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -3708,13 +3992,14 @@ let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   padPoll();
+  if (MP) MP.tick(dt);
   if (HELP.open && mode !== 'editor') { renderer.render(scene, camera); requestAnimationFrame(loop); return; }
   if (mode === 'editor') updateEditorCam(dt);
   else if (mode === 'replay') { if (!DBG.paused) stepReplay(dt); }
   else if (mode === 'rewind') stepRewind(dt);
   else if (mode === 'photo') updatePhotoCam();
   else if (!DBG.paused && RACE.mode === 'free') { stepFree(dt); updateFreeCam(dt); updateFreeHud(dt); }
-  else if (!DBG.paused) { stepRace(dt); updateChaseCam(dt); updateHud(dt); }
+  else if (!DBG.paused) { if (MP) MP.preStep(dt); stepRace(dt); updateChaseCam(dt); updateHud(dt); }
   const sky = scene.userData.sky; sky.position.copy(camera.position);
   scene.userData.sun.position.copy(camera.position).add(new V3(-900, 160, -1200));
   chevTex.offset.y = (now * 0.0012) % 1;
@@ -3762,10 +4047,11 @@ function start(data) {
   $('courseName').value = course.name; $('themeSel').value = course.theme;
   resize(); rebuild(true);
   requestAnimationFrame(loop);
-  if (!store.get('rr.seenHelp', false)) openHelp(0);
+  if (!store.get('rr.seenHelp', false) && !MP_HUB) openHelp(0);
+  if (MP_HUB) mpInit();
 }
 window.claude?.hot?.snapshot?.(() => ({ course }));
-window.__rr = { TC, setScheme, playerInput, GH, XO, RW, shotBlob, stepRewind, dailySpec, parTime, get riders() { return riders; }, get player() { return player; }, get mode() { return mode; }, get TR() { return TR; }, startRace, toEditor, keys, select, step: dt => { stepRace(dt); updateChaseCam(dt); updateHud(dt); }, openHelp, closeHelp, HELP, TUT, tutStart, TUT_CH, autopilot() { player.ai = { skill: 1, mul: 1, lane: 0, laneT: 1, target: 0, shoveT: 1e9, wT: 1e9, wOn: 0 }; }, RACE, REC, startReplay, endReplay, stepReplay, stepFree: dt => { stepFree(dt); updateFreeCam(dt); updateFreeHud(dt); }, FEAT, LOOPS, STARS, RINGS, PROPS, arenaH, stuntEvent, PAD, MUSIC, get RP() { return RP; }, PRESETS, setCourse: c => setCourse(c), DBG, camera, pose: poseMesh, frameAt: s => frameAt(s, mkFrame()) };
+window.__rr = { get MP() { return MP; }, TC, setScheme, playerInput, GH, XO, RW, shotBlob, stepRewind, dailySpec, parTime, get riders() { return riders; }, get player() { return player; }, get mode() { return mode; }, get TR() { return TR; }, startRace, toEditor, keys, select, step: dt => { stepRace(dt); updateChaseCam(dt); updateHud(dt); }, openHelp, closeHelp, HELP, TUT, tutStart, TUT_CH, autopilot() { player.ai = { skill: 1, mul: 1, lane: 0, laneT: 1, target: 0, shoveT: 1e9, wT: 1e9, wOn: 0 }; }, RACE, REC, startReplay, endReplay, stepReplay, stepFree: dt => { stepFree(dt); updateFreeCam(dt); updateFreeHud(dt); }, FEAT, LOOPS, STARS, RINGS, PROPS, arenaH, stuntEvent, PAD, MUSIC, get RP() { return RP; }, PRESETS, setCourse: c => setCourse(c), DBG, camera, pose: poseMesh, frameAt: s => frameAt(s, mkFrame()) };
 window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
 })();
 </script>
