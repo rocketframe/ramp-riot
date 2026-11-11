@@ -1,0 +1,64 @@
+{
+  "hubApi": 1,
+  "id": "ramp",
+  "name": "Ramp Riot",
+  "url": "./",
+  "pitch": "Live bike races. Everyone rides at once; fastest time wins.",
+  "icon": "hub-icon.svg",
+  "players": {
+    "min": 2,
+    "max": 6
+  },
+  "engine": "race",
+  "reconnectGraceMs": 20000,
+  "engineConfig": {
+    "minMs": {
+      "by": "laps",
+      "values": [
+        12576,
+        23753,
+        34976,
+        46188,
+        57364
+      ]
+    },
+    "customMinMsWith": "_course",
+    "startFields": {
+      "laps": "laps",
+      "course": "_course"
+    }
+  },
+  "options": [
+    {
+      "key": "laps",
+      "label": "Laps",
+      "type": "choice",
+      "choices": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "key": "courseName",
+      "label": "Course",
+      "type": "text",
+      "maxLength": 40,
+      "default": "Default",
+      "hidden": true
+    },
+    {
+      "key": "_course",
+      "label": "Course data",
+      "type": "json",
+      "maxBytes": 60000
+    }
+  ],
+  "score": {
+    "label": "Best time",
+    "order": "asc",
+    "format": "ms"
+  }
+}
