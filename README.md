@@ -33,4 +33,4 @@ When the game hub's lobby opens the game with `#hub=<hub>&room=<code>&token=<tok
 - The course is the host's course if they set one, otherwise Sunset Starter. Laps repeat the course end to end.
 - Esc (pressed twice) retires. After the race, the results panel links back to the lobby, lets the host pick their current builder course for the next race, or drops back to single player.
 
-Without that fragment nothing changes and the game makes no extra network calls. The game only loads hub code from origins listed in `HUB_ORIGINS` in `index.html` (and from `localhost` for testing), so add the hub's deployed address there.
+Without that fragment nothing changes and the game makes no extra network calls. The game only loads hub code from origins listed in `HUB_ORIGINS` in `index.html` (the production and staging hubs, plus `localhost` for testing).

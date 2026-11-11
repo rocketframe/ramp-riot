@@ -3737,8 +3737,7 @@ addEventListener('keydown', e => {
    exactly as before. */
 const MP_HUB = (() => { try { return new URLSearchParams(location.hash.slice(1)).get('hub'); } catch (e) { return null; } })();
 // The page loads the hub's client code, so it only trusts these hubs (plus a hub on this computer for testing).
-// Add the deployed Worker origins here, for example 'https://game-hub.<account>.workers.dev'.
-const HUB_ORIGINS = [];
+const HUB_ORIGINS = ['https://game-hub.rocketframe.workers.dev', 'https://game-hub-staging.rocketframe.workers.dev'];
 function hubAllowed(o) {
   try {
     const u = new URL(o);
