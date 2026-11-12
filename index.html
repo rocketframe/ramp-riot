@@ -2092,15 +2092,16 @@ function startRace(opts = {}) {
   applyTheme(RACE.theme); TR = buildTrack(RACE.pieces); renderTrack();
   if (hlMesh) hlMesh.visible = false; if (endMarker) endMarker.visible = false;
   let n = 1 + (+$('oppCount').value), skill = +$('diffSel').value;
-  if (m === 'stunt') n = 1; if (m === 'drag') { n = 2; skill = 1; } if (m === 'tour') n = Math.max(4, n); if (MP) n = 1;
+  if (m === 'stunt') n = 1; if (m === 'drag') { n = 2; skill = 1; } if (m === 'tour') n = Math.max(4, n); if (MP) { n = 1 + MP.aiHere(); skill = MP.aiSkill(); }
   const slots = m === 'drag' ? [[17, -2.6], [17, 2.6]] : [[17, -3.2], [17, 0], [17, 3.2], [11, -3.2], [11, 0], [11, 3.2]];
-  const order = m === 'drag' ? [0, 1] : m === 'stunt' ? [1] : MP ? [MP.slot()] : [4, 0, 1, 2, 3, 5]; // player starts mid back row
+  const order = m === 'drag' ? [0, 1] : m === 'stunt' ? [1] : MP ? [MP.slot(), ...MP.aiSlots()] : [4, 0, 1, 2, 3, 5]; // player starts mid back row
   const mine = $('animalSel').value, kinds = [mine, ...ANIMAL_ORDER.filter(k => k !== mine)];
   riders = [];
   for (let i = 0; i < n; i++) {
     const [s, lat] = slots[order[i]];
     const r = makeRider(i, i === 0, s, lat, skill + (Math.random() * 2 - 1) * 0.03, kinds[i], $('bikeSel').value);
     frameAt(s, F); orientGround(r, F); r.pos.copy(F.p).addScaledVector(F.R, lat); r.hint = F.i;
+    if (MP && i > 0) r.aiId = 'ai:' + i; // online: an AI rider this page rides for the room
     riders.push(r);
   }
   player = riders[0];
@@ -2268,6 +2269,7 @@ function stepRace(dt) {
       if (r.air) stepAir(r, inp, h); else stepGround(r, inp, h);
       if (!r.finished && r.s >= TR.finishS) {
         r.finished = true; r.finishT = raceT;
+        if (MP && r.aiId) MP.aiFinished(r);
         if (r.isPlayer) { const pi = MP ? MP.finished() : ranking().indexOf(r) + 1; TUT.ev('finish', { place: pi }); flash(pi === 1 ? 'WINNER!' : ord(pi) + '!', '#7be36b', 2); finishWait = 2.2; }
       }
       if (r.s > TR.endS - 4) { r.s = TR.endS - 4; r.speed = 0; }
@@ -3798,10 +3800,14 @@ async function mpInit() {
   const hub = Hub.fromLaunch();
   if (!hub || !hub.launch.room) return fallback('That game link is incomplete. Playing single player.');
   const room = hub.joinRoom(hub.launch.room);
-  const lobbyUrl = hub.origin + '/?room=' + encodeURIComponent(room.code);
+  const lobbyUrl = hub.returnUrl || hub.origin + '/?room=' + encodeURIComponent(room.code);
   const others = new Map(); // pid -> { name, mesh, kind, btype, buf, s, pos, color, finishMs, dnf, why }
-  const S = { race: null, startAt: 0, grid: [], me: null, sendAcc: 0, myMs: null, myDnf: false, result: null, quitArm: 0, phase: 'waiting', minMs: 0 };
-  const nameOf = id => (room.room && room.room.players.find(q => q.id === id) || {}).name || 'Rider';
+  const S = { race: null, startAt: 0, grid: [], ai: [], aiMs: {}, aiSkill: 0.94, me: null, sendAcc: 0, myMs: null, myDnf: false, result: null, quitArm: 0, phase: 'waiting', minMs: 0 };
+  const nameOf = id => String(id).startsWith('ai:') ? 'AI rider ' + id.slice(3) : (room.room && room.room.players.find(q => q.id === id) || {}).name || 'Rider';
+  // AI riders (the hub's "AI riders" setting): the host's page rides them like in single player and tells the room
+  // where they are; everyone else sees them as ghosts, like the other players.
+  const AI_SKILL = { 1: 0.86, 2: 0.94, 3: 1.0 };
+  const isHost = () => !!(room.room && room.room.hostId === meId());
   const meId = () => (room.you && room.you.id) || (hub.user && hub.user.id);
   const now = () => room.serverNow();
 
@@ -3832,15 +3838,16 @@ async function mpInit() {
     m.body.position.y = L(11); m.body.position.z = L(12); m.rider.rotation.z = L(13); solveRig(m);
     o.s = L(15); o.pos.copy(m.root.position); m.wheels.forEach(w => w.rotation.x = o.s * 3);
   }
-  function capture() {
-    const m = player.mesh, q = m.root.quaternion, code = ANIMAL_ORDER.indexOf(player.kind) * 8 + BIKE_ORDER.indexOf(player.btype);
+  function capture(r = player) {
+    const m = r.mesh, q = m.root.quaternion, code = ANIMAL_ORDER.indexOf(r.kind) * 8 + BIKE_ORDER.indexOf(r.btype);
     return [m.root.position.x, m.root.position.y, m.root.position.z, q.x, q.y, q.z, q.w, m.body.rotation.x, m.body.rotation.z, m.bike.rotation.y,
-      m.rider.rotation.x, m.body.position.y, m.body.position.z, m.rider.rotation.z, code, player.s].map(v => Math.round(v * 1000) / 1000);
+      m.rider.rotation.x, m.body.position.y, m.body.position.z, m.rider.rotation.z, code, r.s].map(v => Math.round(v * 1000) / 1000);
   }
   // Standings: finishers by time, then riders still going by distance, then retirements.
   function standings() {
     const me = { pid: meId(), name: 'You', me: true, s: player ? player.s : 0, finishMs: S.myMs, dnf: S.myDnf, why: S.myDnf ? 'retired' : '', color: player ? player.color : 0xffffff };
-    const all = [me, ...[...others.values()].filter(o => S.grid.includes(o.pid))];
+    const mine = riders.filter(r => r.aiId).map(r => ({ pid: r.aiId, name: nameOf(r.aiId), s: r.s, finishMs: S.aiMs[r.aiId] != null ? S.aiMs[r.aiId] : null, dnf: false, why: '', color: r.color }));
+    const all = [me, ...mine, ...[...others.values()].filter(o => S.grid.includes(o.pid) || (S.ai.includes(o.pid) && !mine.some(a => a.pid === o.pid)))];
     const k = o => o.finishMs != null ? 0 : o.dnf ? 2 : 1;
     return all.sort((a, b) => k(a) - k(b) || (k(a) === 0 ? a.finishMs - b.finishMs : b.s - a.s));
   }
@@ -3855,6 +3862,7 @@ async function mpInit() {
     const c = cleanCourse(m.course) || defaultCourse(), laps = clamp(Math.round(m.laps) || 1, 1, 5);
     S.race = { name: c.name + (laps > 1 ? ' · ' + laps + ' laps' : ''), theme: c.theme, pieces: lapPieces(c.pieces, laps) };
     S.startAt = m.startAt; S.grid = Array.isArray(m.grid) ? m.grid : []; S.me = meId(); S.result = null; S.quitArm = 0;
+    S.ai = Array.isArray(m.ai) ? m.ai : []; S.aiMs = {}; S.aiSkill = AI_SKILL[m.opts && m.opts.aiLevel] || 0.94;
     S.myMs = m.finish && m.finish[S.me] != null ? m.finish[S.me] : null; S.myDnf = !!(m.dnf && m.dnf[S.me]);
     dropMeshes(); others.clear();
     for (const pid of S.grid) if (pid !== S.me) { const o = other(pid); if (m.finish && m.finish[pid] != null) o.finishMs = m.finish[pid]; if (m.dnf && m.dnf[pid]) o.dnf = true; }
@@ -3882,7 +3890,11 @@ async function mpInit() {
       o.buf.push({ t: performance.now(), s: m.s }); if (o.buf.length > 12) o.buf.shift();
       return;
     }
-    if (m.k === 'finished') {
+    if (m.k === 'finished' && S.ai.includes(m.pid)) {
+      S.aiMs[m.pid] = m.ms;
+      if (others.has(m.pid)) others.get(m.pid).finishMs = m.ms;
+    }
+    else if (m.k === 'finished') {
       if (m.pid === meId()) { S.myMs = m.ms; if (player) player.finishT = m.ms / 1000; }
       else { const o = other(m.pid); o.finishMs = m.ms; flash(o.name + ' finished', '#3fe3ff', 1.2); }
     }
@@ -3900,6 +3912,14 @@ async function mpInit() {
   MP = {
     get race() { return S.race; },
     slot() { const i = Math.max(0, S.grid.indexOf(S.me)); return MPX.LANES[i % MPX.LANES.length]; },
+    // AI riders start in the slots after the humans; only the host's page rides them
+    aiHere() { return isHost() ? Math.min(S.ai.length, MPX.LANES.length - S.grid.length) : 0; },
+    aiSlots() { return Array.from({ length: MP.aiHere() }, (_, j) => MPX.LANES[(S.grid.length + j) % MPX.LANES.length]); },
+    aiSkill() { return S.aiSkill; },
+    aiFinished(r) {
+      const ms = Math.max(0, Math.round(now() - S.startAt));
+      S.aiMs[r.aiId] = ms; room.sendGame({ k: 'finish', ai: +r.aiId.slice(3), ms });
+    },
     countdown() { return Math.max(0, (S.startAt - now()) / 1000); },
     // keep the race clock on the server's clock, so the time on screen is the time that counts
     preStep(dt) {
@@ -3917,7 +3937,10 @@ async function mpInit() {
       if (!S.race) return;
       if (player && (mode === 'countdown' || mode === 'race' || mode === 'rewind') && !S.myDnf) {
         S.sendAcc += dt;
-        if (S.sendAcc >= 1 / MPX.SEND_HZ) { S.sendAcc = 0; room.sendGame({ k: 'pos', s: capture() }); }
+        if (S.sendAcc >= 1 / MPX.SEND_HZ) {
+          S.sendAcc = 0; room.sendGame({ k: 'pos', s: capture() });
+          for (const r of riders) if (r.aiId && S.aiMs[r.aiId] == null) room.sendGame({ k: 'pos', ai: +r.aiId.slice(3), s: capture(r) });
+        }
       }
       const t = performance.now() - MPX.DELAY;
       for (const o of others.values()) { poseGhost(o, t); if (o.mesh) o.mesh.root.visible = mode !== 'editor' && mode !== 'replay' && !o.dnf; }
@@ -3959,7 +3982,7 @@ async function mpInit() {
       }
       $('mpTitle').textContent = title; $('mpSub').textContent = sub;
       const rows = final
-        ? R.players.slice().sort((a, b) => (a.place || 99) - (b.place || 99)).map(p => `<tr class="${p.id === meId() ? 'me' : ''}"><td>${p.place || '–'}</td><td>${esc(p.id === meId() ? 'You' : p.name)}</td><td>${p.score != null ? fmt(p.score / 1000) : p.flagged ? 'time rejected' : 'DNF'}</td></tr>`)
+        ? R.players.concat((R.ai || []).map(a => ({ ...a, name: nameOf(a.id) }))).sort((a, b) => (a.place || 99) - (b.place || 99)).map(p => `<tr class="${p.id === meId() ? 'me' : ''}"><td>${p.place || '–'}</td><td>${esc(p.id === meId() ? 'You' : p.name)}</td><td>${p.score != null ? fmt(p.score / 1000) : p.flagged ? 'time rejected' : 'DNF'}</td></tr>`)
         : st.map((o, i) => `<tr class="${o.me ? 'me' : ''}"><td>${o.finishMs != null ? i + 1 : '–'}</td><td><span class="dot" style="background:#${o.color.toString(16).padStart(6, '0')}"></span>${esc(o.name)}</td><td>${o.finishMs != null ? fmt(o.finishMs / 1000) : o.dnf ? (o.why === 'time rejected' ? 'time rejected' : o.why === 'left' ? 'left' : 'retired') : Math.max(0, Math.round(TR.finishS - o.s)) + ' m to go'}</td></tr>`);
       $('mpTable').innerHTML = rows.join('');
       const canSet = room.isHost && S.phase !== 'playing';
