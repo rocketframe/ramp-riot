@@ -997,12 +997,28 @@ function buildEnv() {
   if (GFX.envRT) GFX.envRT.dispose(); GFX.envRT = rt; scene.environment = rt.texture;
   es.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
 }
+// Auto resolution: if frames get slow, render a little softer until the frame rate recovers, then sharpen again.
+// Watches real frame times only (pauses and background tabs are ignored), so it never touches the game clock.
+const AUTO = { scale: 1, slow: 0, fast: 0, avg: 1 / 60 };
+function gfxAuto(rawDt) {
+  if (AUTO.off) return;
+  if (!(rawDt > 0) || rawDt > 0.25 || document.hidden) return;
+  AUTO.avg += (rawDt - AUTO.avg) * 0.05;
+  if (AUTO.avg > 1 / 48) { AUTO.slow += rawDt; AUTO.fast = 0; } else if (AUTO.avg < 1 / 58) { AUTO.fast += rawDt; AUTO.slow = 0; } else AUTO.slow = AUTO.fast = 0;
+  let next = AUTO.scale;
+  if (AUTO.slow > 1.5 && AUTO.scale > 0.55) next = Math.max(0.55, AUTO.scale - 0.12);
+  else if (AUTO.fast > 5 && AUTO.scale < 1) next = Math.min(1, AUTO.scale + 0.08);
+  if (next !== AUTO.scale) { AUTO.scale = next; AUTO.slow = AUTO.fast = 0; gfxPixelRatio(); }
+}
+function gfxPixelRatio() {
+  const base = Math.min(GFX.q === 'high' ? 2 : 1.5, window.devicePixelRatio || 1);
+  renderer.setPixelRatio(Math.max(0.5, base * AUTO.scale)); if (typeof resize === 'function') resize();
+}
 function setGfx(q) {
   GFX.q = q === 'low' ? 'low' : 'high'; store.set('rr.gfx', GFX.q);
-  renderer.setPixelRatio(Math.min(GFX.q === 'high' ? 2 : 1.5, window.devicePixelRatio || 1));
+  AUTO.scale = 1; gfxPixelRatio();
   const ms = GFX.q === 'high' ? 2048 : 1024;
   if (sunL.shadow.mapSize.x !== ms) { sunL.shadow.mapSize.set(ms, ms); if (sunL.shadow.map) { sunL.shadow.map.dispose(); sunL.shadow.map = null; } }
-  if (typeof resize === 'function') resize();
 }
 
 function canvasTex(w, h, draw, rep) {
@@ -1365,7 +1381,7 @@ function limb(parent, a, b, r, mat) {
   m.position.copy(a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(YAX, d.normalize()); m.castShadow = true; parent.add(m); return m;
 }
 function eye(parent, x, y, z, r, iris, slit) {
-  r *= 1.3; const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g);
+  r *= 1.3; const g = new THREE.Group(); g.position.set(x, y, z); g.userData.eye = true; parent.add(g);
   part(g, GEO.sph, std(0xffffff, 0.3), 0, 0, 0, r);
   part(g, GEO.sph, std(iris, 0.3), 0, 0, r * 0.5, r * 0.66, r * 0.66, r * 0.5);
   if (slit) part(g, GEO.box, basic(0x050505), 0, 0, r * 0.82, r * 0.18, r * 0.9, r * 0.1);
@@ -1521,13 +1537,15 @@ function buildBikeBody(bike, type, paint, wheels) {
     const w = new THREE.Group(); w.position.set(x, y, z); bike.add(w);
     add(new THREE.TorusGeometry(r, t, 14, 40), rubber, 0, 0, 0, 0, PI / 2, 0, w);
     add(new THREE.CylinderGeometry(hub, hub, 0.2, 10), chrome, 0, 0, 0, 0, 0, PI / 2, w);
-    for (let k = 0; k < spokes; k++) add(rbox(0.02, r * 2 - t, 0.025), chrome, 0, 0, 0, k * PI / spokes, 0, 0, w);
+    add(new THREE.TorusGeometry(r - t * 0.8, Math.max(0.012, t * 0.16), 8, 40), chrome, 0, 0, 0, 0, PI / 2, 0, w); // rim
+    const sw = spokes >= 9 ? 0.012 : 0.02;
+    for (let k = 0; k < spokes; k++) add(rbox(sw, r * 2 - t * 1.6, sw * 1.2), chrome, 0, 0, 0, k * PI / spokes, 0, 0, w);
     wheels.push(w); return w;
   };
   const bars = (y, z, half, rise = 0) => { add(new THREE.CylinderGeometry(0.025, 0.025, half * 2, 8), dark, 0, y, z, 0, 0, PI / 2); if (rise) for (const sg of [-1, 1]) tube([sg * half * 0.6, y - rise, z], [sg * half * 0.9, y, z], 0.022, chrome); for (const sg of [-1, 1]) add(new THREE.CylinderGeometry(0.035, 0.035, 0.14, 8), dark, sg * half, y, z, 0, 0, PI / 2); };
   switch (type) {
     case 'cross':
-      wheel(0, 0.52, 0.8, 0.38, 0.14); wheel(0, 0.52, -0.72, 0.38, 0.14);
+      wheel(0, 0.52, 0.8, 0.38, 0.14, 14, 0.07); wheel(0, 0.52, -0.72, 0.38, 0.14, 14, 0.08);
       add(rbox(0.24, 0.32, 1.05), dark, 0, 0.82, 0.02, -0.12);
       add(rbox(0.42, 0.3, 0.6), paint, 0, 1.08, 0.2, -0.08);
       add(rbox(0.34, 0.12, 0.62), dark, 0, 1.12, -0.34);
@@ -1595,6 +1613,26 @@ function buildBikeBody(bike, type, paint, wheels) {
       for (const sg of [-1, 1]) add(rbox(0.16, 0.03, 0.06), dark, sg * 0.16, 0.51, 0.55);
       break;
   }
+  // mechanical detail: brake discs and calipers, chain and sprockets, engine fins
+  const motor = type === 'cross' || type === 'race' || type === 'cruiser', pedal = type === 'bmx' || type === 'bicycle';
+  const steel = std(0x9aa1ab, 0.3, 0.9);
+  if (motor || pedal) {
+    const [fw, rw] = wheels, rr = type === 'cross' ? 0.38 : type === 'race' ? 0.36 : 0.4;
+    if (motor) {
+      add(new THREE.CylinderGeometry(rr * 0.42, rr * 0.42, 0.012, 28), steel, -0.11, 0, 0, 0, 0, PI / 2, fw);
+      add(rbox(0.05, 0.1, 0.12), dark, -0.13, fw.position.y + rr * 0.3, fw.position.z - rr * 0.25, 0.6);
+      add(new THREE.CylinderGeometry(rr * 0.32, rr * 0.32, 0.012, 24), steel, -0.11, 0, 0, 0, 0, PI / 2, rw);
+    }
+    // rear sprocket on the wheel, front sprocket at the engine or cranks, chain between them
+    const sx = 0.12, rs = pedal ? 0.07 : rr * 0.36, fz = pedal ? 0 : -0.05, fy = pedal ? 0.34 + (type === 'bicycle' ? 0.08 : 0) : 0.66, fs = pedal ? 0.11 : 0.06;
+    add(new THREE.CylinderGeometry(rs, rs, 0.015, 20), steel, sx, 0, 0, 0, 0, PI / 2, rw);
+    add(new THREE.CylinderGeometry(fs, fs, 0.015, 18), steel, sx, fy, fz, 0, 0, PI / 2);
+    const ry = rw.position.y, rz = rw.position.z;
+    for (const sg of [-1, 1]) tube([sx, ry + sg * rs, rz], [sx, fy + sg * fs, fz], 0.009, dark);
+  }
+  if (type === 'cross' || type === 'race') { // cooling fins on the cylinder
+    for (let k = 0; k < 5; k++) add(rbox(0.3, 0.018, 0.2), steel, 0, 0.62 + k * 0.045, 0.22, -0.2);
+  }
 }
 // two-bone IK: joint J reaching for T with bones a and b, the bend pointing toward pole
 const ikD = new V3(), ikP = new V3(), ikK = new V3(), ikT = new V3(), ikJ = new V3(), ikS = new V3();
@@ -1608,7 +1646,8 @@ function ik2(J, T, a, b, pole, K, Tout) {
 }
 function placeBone(mesh, A, B) { mesh.position.addVectors(A, B).multiplyScalar(0.5); ikS.subVectors(B, A).normalize(); mesh.quaternion.setFromUnitVectors(YAX, ikS); }
 const poleTmp = new V3();
-function solveRig(m) {
+function solveRig(m) { solveRigBase(m); if (m.limbSkin) poseLimbSkin(m); }
+function solveRigBase(m) {
   const ik = m.ik, rd = m.rider; rd.updateMatrix();
   for (let k = 0; k < 2; k++) {
     const sg = k ? 1 : -1, A = m.arms[k], Lg = m.legs[k];
@@ -1623,6 +1662,128 @@ function solveRig(m) {
     ik2(ikJ, ik.foot[k], ik.legSeg, ik.legSeg, poleTmp, ikK, ikT);
     placeBone(Lg.a, ikJ, ikK); placeBone(Lg.b, ikK, ikT); Lg.foot.position.set(ikT.x, ikT.y - 0.02, ikT.z + 0.06);
   }
+}
+
+
+/* ---- one smooth skinned mesh for all four limbs ----
+   The IK above still decides where every joint goes; these 12 bones just copy it, so the limbs bend smoothly at
+   elbows and knees instead of being separate capsules. Short team-colour sleeves, furry forearms and paws, riding
+   trousers and boots. One draw call instead of twelve. */
+function buildLimbSkin(m, A, kind, paint) {
+  const fur = new THREE.Color(kind === 'panda' ? A.dark : A.fur), team = paint.color.clone(), pants = new THREE.Color(0x1d2230), boot = new THREE.Color(0x2a2d35), sole = new THREE.Color(0x8a8f99), claw = new THREE.Color(A.light);
+  const P = [], C = [], SI = [], SW = [], I = [], bones = [], bind = [];
+  const bone = (x, y) => { const b = new THREE.Bone(); b.position.set(x, y, 0); bones.push(b); bind.push(new V3(x, y, 0)); return bones.length - 1; };
+  const vtx = (x, y, z, c, i0, i1 = i0, w1 = 0) => { P.push(x, y, z); C.push(c.r, c.g, c.b); SI.push(i0, i1, 0, 0); SW.push(1 - w1, w1, 0, 0); return P.length / 3 - 1; };
+  const RS = 12;
+  // a tube along +y through two bones, with a radius and colour profile along its length
+  function limb(x, a, b, rad, col) {
+    const iA = bone(x, 0), iB = bone(x, a / 2 + b / 2), y0 = -a / 2, L = a + b, rings = 18, base = P.length / 3;
+    for (let r = 0; r <= rings; r++) {
+      const s = r / rings * L, y = y0 + s, rr = rad(s, a, b), c = col(s, a, b);
+      const w = THREE.MathUtils.smoothstep(s, a - 0.07, a + 0.07);
+      for (let k = 0; k < RS; k++) { const th = k / RS * TAU; vtx(x + Math.cos(th) * rr, y, Math.sin(th) * rr, c, iA, iB, w); }
+    }
+    for (let r = 0; r < rings; r++) for (let k = 0; k < RS; k++) { const a0 = base + r * RS + k, a1 = base + r * RS + (k + 1) % RS, b0 = a0 + RS, b1 = a1 + RS; I.push(a0, b0, a1, a1, b0, b1); }
+    return [iA, iB];
+  }
+  // a squashed sphere fixed to one bone
+  function blob(bi, cx, cy, cz, rx, ry, rz, c, seg = 12) {
+    const o = bind[bi], base = P.length / 3, rows = Math.max(6, seg * 0.6 | 0);
+    for (let j = 0; j <= rows; j++) { const ph = j / rows * PI; for (let k = 0; k <= seg; k++) { const th = k / seg * TAU;
+      vtx(o.x + cx + Math.sin(ph) * Math.cos(th) * rx, o.y + cy + Math.cos(ph) * ry, o.z + cz + Math.sin(ph) * Math.sin(th) * rz, c, bi); } }
+    for (let j = 0; j < rows; j++) for (let k = 0; k < seg; k++) { const a0 = base + j * (seg + 1) + k, b0 = a0 + seg + 1; I.push(a0, a0 + 1, b0, a0 + 1, b0 + 1, b0); }
+  }
+  const aS = m.ik.armSeg, lS = m.ik.legSeg, out = [];
+  for (let k = 0; k < 2; k++) {
+    const x = (k ? 1 : -1) * 2;
+    // arm: sleeve with a rolled cuff, then fur, tapering to the wrist
+    const [ua, fa] = limb(x, aS, aS, (s, a, b) => s < a ? 0.07 - 0.012 * s / a + 0.008 * Math.sin(PI * s / a) + (s > a * 0.52 && s < a * 0.62 ? 0.009 : 0) : 0.058 + 0.007 * Math.sin(PI * (s - a) / b) - 0.016 * (s - a) / b,
+      (s, a) => s < a * 0.62 ? team : fur);
+    const paw = bone(x, aS + aS / 2 + 4); // placed at the hand each frame
+    blob(paw, 0, 0, 0.005, 0.072, 0.058, 0.08, fur);
+    for (let f = -1; f <= 1; f++) blob(paw, f * 0.034, -0.022, 0.062, 0.022, 0.022, 0.032, fur, 8);
+    blob(paw, (k ? -1 : 1) * 0.055, 0.0, 0.03, 0.022, 0.022, 0.03, fur, 8);
+    // leg: riding trousers, knee, boot top
+    const [th, sh] = limb(x * 2, lS, lS, (s, a, b) => s < a ? 0.095 - 0.022 * s / a : 0.074 + 0.006 * Math.sin(PI * (s - a) / b) - 0.012 * (s - a) / b + (s > a + b * 0.8 ? 0.014 : 0),
+      (s, a, b) => s > a + b * 0.8 ? boot : pants);
+    const ft = bone(x * 2, lS * 1.5 + 4);
+    blob(ft, 0, 0.005, 0.0, 0.088, 0.075, 0.16, boot);
+    blob(ft, 0, -0.05, 0.005, 0.09, 0.025, 0.165, sole);
+    blob(ft, 0, 0.0, 0.11, 0.07, 0.06, 0.06, boot, 10);
+    out.push({ ua, fa, paw, th, sh, ft });
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(SI, 4)); g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(SW, 4));
+  g.setIndex(I); g.computeVertexNormals();
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(P.length / 3 * 2).map((_, i) => i % 2 ? P[(i >> 1) * 3 + 1] * 3 : Math.atan2(P[(i >> 1) * 3 + 2], P[(i >> 1) * 3] - Math.round(P[(i >> 1) * 3] / 2) * 2) * 0.5), 2));
+  const mesh = new THREE.SkinnedMesh(g, FUR_VC); mesh.castShadow = true; mesh.frustumCulled = false;
+  for (const b of bones) mesh.add(b);
+  mesh.updateMatrixWorld(true); mesh.bind(new THREE.Skeleton(bones), new THREE.Matrix4());
+  m.body.add(mesh);
+  // the old capsules stay as invisible joint markers for the IK
+  for (const L of [...m.arms, ...m.legs]) for (const o of [L.a, L.b, L.paw || L.foot]) m.body.remove(o);
+  m.limbSkin = { mesh, bones, map: out };
+}
+function poseLimbSkin(m) {
+  const sk = m.limbSkin, B = sk.bones;
+  for (let k = 0; k < 2; k++) {
+    const A = m.arms[k], Lg = m.legs[k], o = sk.map[k];
+    B[o.ua].position.copy(A.a.position); B[o.ua].quaternion.copy(A.a.quaternion);
+    B[o.fa].position.copy(A.b.position); B[o.fa].quaternion.copy(A.b.quaternion);
+    B[o.paw].position.copy(A.paw.position);
+    B[o.th].position.copy(Lg.a.position); B[o.th].quaternion.copy(Lg.a.quaternion);
+    B[o.sh].position.copy(Lg.b.position); B[o.sh].quaternion.copy(Lg.b.quaternion);
+    B[o.ft].position.copy(Lg.foot.position);
+  }
+}
+
+// Draw-call diet: bake the many small static parts of a group into one mesh per material.
+// Same look, same pivots; a bike drops from about 60 draw calls to under 20.
+const bakeM4 = new THREE.Matrix4(), bakeInv = new THREE.Matrix4();
+// one shared furry material for baked heads, tails and torsos: each part keeps its colour as a vertex colour
+const EYE_VC = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.18, envMapIntensity: 1.2 });
+const FUR_VC = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.78, sheen: 1, sheenRoughness: 0.55, sheenColor: new THREE.Color(0x777777), bumpMap: furBump, bumpScale: 0.4, envMapIntensity: 0.7 });
+function bakeGroup(group, skip, oneMat) {
+  group.updateMatrixWorld(true); bakeInv.copy(group.matrixWorld).invert();
+  const byMat = new Map(), dead = [];
+  const walk = o => {
+    for (const c of o.children) {
+      if (skip && skip.has(c)) continue;
+      if (c.isMesh && !c.isSkinnedMesh && c.geometry.index && c.visible) {
+        const g = c.geometry, a = g.attributes;
+        if (a.position && a.normal && a.uv && !a.color) {
+          bakeM4.multiplyMatrices(bakeInv, c.matrixWorld);
+          const key = oneMat || c.material;
+          if (!byMat.has(key)) byMat.set(key, []);
+          byMat.get(key).push([g, bakeM4.clone(), c.material.color]); dead.push(c);
+        }
+      }
+      walk(c);
+    }
+  };
+  walk(group);
+  for (const [mat, list] of byMat) {
+    let nv = 0, ni = 0; for (const [g] of list) { nv += g.attributes.position.count; ni += g.index.count; }
+    const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), U = new Float32Array(nv * 2), C = oneMat ? new Float32Array(nv * 3) : null, I = nv > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
+    const nm = new THREE.Matrix3(), v = new V3(); let ov = 0, oi = 0;
+    for (const [g, m4, col] of list) {
+      const pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv, ix = g.index; nm.getNormalMatrix(m4);
+      for (let i = 0; i < pa.count; i++) {
+        v.fromBufferAttribute(pa, i).applyMatrix4(m4); P[(ov + i) * 3] = v.x; P[(ov + i) * 3 + 1] = v.y; P[(ov + i) * 3 + 2] = v.z;
+        v.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); N[(ov + i) * 3] = v.x; N[(ov + i) * 3 + 1] = v.y; N[(ov + i) * 3 + 2] = v.z;
+        U[(ov + i) * 2] = ua.getX(i); U[(ov + i) * 2 + 1] = ua.getY(i);
+        if (C) { C[(ov + i) * 3] = col.r; C[(ov + i) * 3 + 1] = col.g; C[(ov + i) * 3 + 2] = col.b; }
+      }
+      for (let i = 0; i < ix.count; i++) I[oi + i] = ix.getX(i) + ov;
+      ov += pa.count; oi += ix.count;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(P, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(N, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(U, 2)); geo.setIndex(new THREE.BufferAttribute(I, 1)); if (C) geo.setAttribute('color', new THREE.BufferAttribute(C, 3));
+    geo.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geo, mat); mesh.castShadow = true; mesh.receiveShadow = false; group.add(mesh);
+  }
+  for (const c of dead) c.parent.remove(c);
 }
 function makeBike(color, kind, type = 'cross') {
   const A = ANIMALS[kind], fit = FIT[type];
@@ -1662,6 +1823,8 @@ function makeBike(color, kind, type = 'cross') {
   const tail = new THREE.Group(); tail.position.set(0, 0.06, -0.2); rider.add(tail); buildTail(tail, kind, A);
   const ik = { hand: [new V3(-fit.bars[0], fit.bars[1], fit.bars[2]), new V3(fit.bars[0], fit.bars[1], fit.bars[2])], foot: [footAt(-1, 0), footAt(1, PI)], knee: [0, 0], footAt, hipJ: [hipJ(-1), hipJ(1)], legSeg, armSeg };
   const m = { root, body, bike, wheels, rider, arms, legs, head, tail, armBase, fit, ik };
+  solveRigBase(m); buildLimbSkin(m, A, kind, paint);
+  for (const w of wheels) bakeGroup(w); bakeGroup(bike, new Set(wheels)); const eyes = []; head.traverse(o => { if (o.userData.eye) eyes.push(o); }); for (const e of eyes) bakeGroup(e, null, EYE_VC); bakeGroup(head, new Set(eyes), FUR_VC); bakeGroup(tail, null, FUR_VC); bakeGroup(rider, new Set([head, tail]), FUR_VC);
   solveRig(m); return m;
 }
 
@@ -4215,6 +4378,7 @@ addEventListener('resize', resize);
 const DBG = { paused: false };
 let last = performance.now();
 function loop(now) {
+  gfxAuto((now - last) / 1000);
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   padPoll();
   if (MP) MP.tick(dt);
@@ -4276,7 +4440,7 @@ function start(data) {
   if (MP_HUB) mpInit();
 }
 window.claude?.hot?.snapshot?.(() => ({ course }));
-window.__rr = { get MP() { return MP; }, TC, setScheme, playerInput, GH, XO, RW, shotBlob, stepRewind, dailySpec, parTime, get riders() { return riders; }, get player() { return player; }, get mode() { return mode; }, get TR() { return TR; }, startRace, toEditor, keys, select, step: dt => { stepRace(dt); updateChaseCam(dt); updateHud(dt); }, openHelp, closeHelp, HELP, TUT, tutStart, TUT_CH, autopilot() { player.ai = { skill: 1, mul: 1, lane: 0, laneT: 1, target: 0, shoveT: 1e9, wT: 1e9, wOn: 0 }; }, RACE, REC, startReplay, endReplay, stepReplay, stepFree: dt => { stepFree(dt); updateFreeCam(dt); updateFreeHud(dt); }, FEAT, LOOPS, STARS, RINGS, PROPS, arenaH, stuntEvent, PAD, MUSIC, get RP() { return RP; }, PRESETS, setCourse: c => setCourse(c), DBG, camera, GFX, setGfx, FX, fxTick, pose: poseMesh, frameAt: s => frameAt(s, mkFrame()) };
+window.__rr = { get MP() { return MP; }, TC, setScheme, playerInput, GH, XO, RW, shotBlob, stepRewind, dailySpec, parTime, get riders() { return riders; }, get player() { return player; }, get mode() { return mode; }, get TR() { return TR; }, startRace, toEditor, keys, select, step: dt => { stepRace(dt); updateChaseCam(dt); updateHud(dt); }, openHelp, closeHelp, HELP, TUT, tutStart, TUT_CH, autopilot() { player.ai = { skill: 1, mul: 1, lane: 0, laneT: 1, target: 0, shoveT: 1e9, wT: 1e9, wOn: 0 }; }, RACE, REC, startReplay, endReplay, stepReplay, stepFree: dt => { stepFree(dt); updateFreeCam(dt); updateFreeHud(dt); }, FEAT, LOOPS, STARS, RINGS, PROPS, arenaH, stuntEvent, PAD, MUSIC, get RP() { return RP; }, PRESETS, setCourse: c => setCourse(c), DBG, camera, renderer, AUTO, GFX, setGfx, FX, fxTick, pose: poseMesh, frameAt: s => frameAt(s, mkFrame()) };
 window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
 })();
 </script>
