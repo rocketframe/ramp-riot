@@ -1231,7 +1231,7 @@ function renderTrack() {
     L.copy(a.p).addScaledVector(a.R, -HALF); Rr.copy(a.p).addScaledVector(a.R, HALF);
     L2.copy(b.p).addScaledVector(b.R, -HALF); R2.copy(b.p).addScaledVector(b.R, HALF);
     quad(rp, rn, ru, L, Rr, L2, R2, a.U, b.U, a.s / 12, b.s / 12);
-    const dirt = SURF && (a.kind === 'kicker' || a.kind === 'landing') ? 1 : 0, tint = dirt ? [1, 1, 1] : KIND_TINT[a.kind] || [1, 1, 1];
+    const dirt = SURF && themeKey !== 'city' && (a.kind === 'kicker' || a.kind === 'landing') ? 1 : 0, tint = dirt ? [1, 1, 1] : KIND_TINT[a.kind] || [1, 1, 1];
     for (let k = 0; k < 6; k++) { rc.push(tint[0], tint[1], tint[2]); rd.push(dirt); }
     faceToPiece.push(a.piece, a.piece);
     // rails
