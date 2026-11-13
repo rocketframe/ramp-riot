@@ -17,7 +17,7 @@ It loads Three.js from the jsDelivr CDN, so it needs an internet connection.
 - Scenery themes with a synth soundtrack
 - Air tricks, wheelies, stunt replays and photo mode
 - Ghosts, medals, high scores and a daily challenge
-- Keyboard, gamepad and touch controls (buttons, tilt or swipe)
+- Keyboard and gamepad on desktop; on phones and tablets a two-thumb trackpad by default (or buttons, tilt or swipe)
 - In-game "How to play" guide and hands-on tutorial
 
 ## Ads
