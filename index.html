@@ -1,3 +1,6 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Ramp Riot</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -236,7 +239,7 @@ body.rewinding #c{filter:saturate(.35) hue-rotate(200deg) contrast(1.08)}
   -webkit-mask:radial-gradient(ellipse at 50% 58%,transparent 30%,#000 75%);mask:radial-gradient(ellipse at 50% 58%,transparent 30%,#000 75%);animation:streak .18s steps(2) infinite}
 @keyframes streak{from{transform:rotate(0)}to{transform:rotate(1.5deg)}}
 @media (prefers-reduced-motion:reduce){#streaks{animation:none}}
-body.photo #hud,body.photo #touch,body.photo #quit,body.photo #helpRace,body.photo #ctlRace,body.photo #swipe,body.photo #tut,body.photo #streaks,body.photo #tiltBar,body.photo #swipeHint{display:none!important}
+body.photo #hud,body.photo #touch,body.photo #quit,body.photo #helpRace,body.photo #ctlRace,body.photo #swipe,body.photo #tut,body.photo #streaks,body.photo #tiltBar,body.photo #swipeHint,body.photo #tpad{display:none!important}
 #photoBar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:20;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;background:rgba(13,18,32,.8);border:1px solid var(--line);border-radius:10px;padding:8px 10px;max-width:calc(100vw - 32px);box-sizing:border-box}
 #photoBar[hidden],#share[hidden]{display:none}
 #photoBar .ph-hint{font-size:12px;color:var(--mute);width:100%;text-align:center}
@@ -274,7 +277,16 @@ body.photo #hud,body.photo #touch,body.photo #quit,body.photo #helpRace,body.pho
 #recWrap{margin-top:10px;font-size:13px}
 #recWrap summary{cursor:pointer;color:var(--mute)}
 body.ctl-tilt #touch [data-k=left],body.ctl-tilt #touch [data-k=right]{display:none}
-#swipe{position:fixed;inset:0;z-index:5;touch-action:none;user-select:none;-webkit-user-select:none}
+#swipe{position:fixed;inset:0;z-index:5;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#touch,#touch button{-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+/* Trackpad: left half steers, right half is gas/brake/flips */
+#tpad{position:fixed;inset:0;z-index:5;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+#tpad .tz{position:absolute;top:0;bottom:0;width:50%}#tpad .tz.l{left:0}#tpad .tz.r{right:0}
+#tpad .tl{position:absolute;left:50%;top:60%;transform:translate(-50%,-50%);width:max-content;max-width:calc(100% - 32px);background:rgba(13,18,32,.7);border:1px solid var(--line);border-radius:8px;padding:7px 11px;font:500 12px/1.5 var(--body);color:#dfe5f2;text-align:center;transition:opacity .6s;pointer-events:none}
+#tpad .tl b{color:var(--signal)}
+#tpad .ring{position:absolute;width:84px;height:84px;margin:-42px 0 0 -42px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(13,18,32,.2);pointer-events:none}
+#tpad .ring i{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:rgba(255,255,255,.5)}
+#tpad .ring.g{border-color:rgba(255,178,31,.85)}#tpad .ring.b{border-color:rgba(255,90,90,.85)}#tpad .ring.u{border-color:rgba(120,220,255,.85)}
 #stick{position:absolute;width:128px;height:128px;margin:-64px 0 0 -64px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(13,18,32,.25);pointer-events:none}
 #stick.g{border-color:rgba(255,178,31,.85)} #stick.b{border-color:rgba(255,90,90,.85)}
 #stickKnob{position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;border-radius:50%;background:rgba(255,255,255,.55)}
@@ -285,6 +297,7 @@ body.ctl-tilt #touch [data-k=left],body.ctl-tilt #touch [data-k=right]{display:n
 #tiltKnob{position:absolute;left:50%;top:3px;width:18px;height:18px;margin-left:-9px;border-radius:50%;background:var(--signal)}
 #ctlRace{position:fixed;right:calc(max(16px,env(safe-area-inset-right,0px)) + 44px);top:calc(54px + env(safe-area-inset-top,0px));z-index:7;width:38px;height:38px;border-radius:50%;padding:0;font-size:17px;background:rgba(13,18,32,.7)}
 body.ctl-swipe #hud .bl,body.ctl-swipe #hud .br{bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+body.touchmode.ctl-pad #hud .bl,body.touchmode.ctl-pad #hud .br{bottom:calc(58px + env(safe-area-inset-bottom,0px))}
 
 @media (max-width:760px){
   #editor{top:auto;width:100%;height:56%;border-right:0;border-top:1px solid var(--line);padding-top:0}
@@ -365,7 +378,7 @@ body.touchmode #keys{display:none}
       <label class="check"><input type="checkbox" id="musicChk"> Soundtrack</label>
       <div class="row" style="margin-top:8px">
         <label for="touchSel" style="flex:.6;align-self:center;font-size:12px;color:var(--mute)">Touch controls</label>
-        <select id="touchSel"><option value="buttons">Buttons</option><option value="tilt">Tilt to steer</option><option value="swipe">Swipe pad</option></select>
+        <select id="touchSel"><option value="pad">Trackpad (two thumbs)</option><option value="buttons">Buttons</option><option value="tilt">Tilt to steer</option><option value="swipe">Swipe pad (one thumb)</option></select>
       </div>
       <div class="row" style="margin-top:8px">
         <label for="gfxSel" style="flex:.6;align-self:center;font-size:12px;color:var(--mute)">Graphics</label>
@@ -513,6 +526,7 @@ body.touchmode #keys{display:none}
         </table>
         <h4>Touch screens</h4>
         <p>Pick a scheme under <b>Touch controls</b> in the builder, or switch mid-ride with the round button at the top right.</p>
+        <p><b>Trackpad</b> (the default on phones and tablets): two thumbs and no buttons. Put your left thumb anywhere on the left half and slide it sideways to steer; a quick flick shoves. Hold anywhere on the right half for gas, slide down to brake and slide up for a wheelie. In the air slide the right thumb up or down to flip, and tap for a trick. Double tap the right side for nitro.</p>
         <p><b>Buttons:</b> <b>◀ ▶</b> steer, <b>GAS</b>, <b>BRK</b>, <b>N₂O</b> nitro, <b>★</b> trick, <b>WHL</b> wheelie, and <b>⇤ ⇥</b> shove. In the air, tap GAS or BRK to flip.</p>
         <p><b>Tilt to steer:</b> tilt the phone like a steering wheel and use the buttons for the rest. The middle is set when the ride starts; tap the tilt bar to reset it. If your phone or browser blocks the tilt sensor, it falls back to ◀ ▶.</p>
         <p><b>Swipe pad:</b> put a finger anywhere and drag. Up is gas, down is brake, sideways steers. In the air drag up or down again to flip, and tap for a trick. Double tap for nitro, hold a second finger for a wheelie, and flick a second finger sideways to shove.</p>
@@ -696,6 +710,7 @@ body.touchmode #keys{display:none}
   <div class="tb"><span id="tutCount"></span><button class="btn" id="tutSkip">Skip step</button><button class="btn primary" id="tutNext" hidden>Next chapter ›</button></div>
 </div>
 
+<div id="tpad" hidden aria-label="Trackpad"><div class="tz l"><span class="tl"><b>Left thumb</b><br>slide ◀ ▶ to steer<br>flick to shove</span><div class="ring" hidden><i></i></div></div><div class="tz r"><span class="tl"><b>Right thumb</b><br>hold for gas<br>slide ▼ brake · ▲ wheelie<br>in the air: ▲ ▼ flip, tap = trick<br>double tap: nitro</span><div class="ring" hidden><i></i></div></div></div>
 <div id="swipe" hidden aria-label="Swipe pad"><div id="stick" hidden><i id="stickKnob"></i></div></div>
 <div id="swipeHint" hidden><b>Swipe pad</b> Drag up: gas · down: brake · sideways: steer<br>In the air: drag up/down to flip, tap for a trick<br>Double tap: nitro · 2nd finger: hold for wheelie, flick to shove</div>
 <div id="tiltBar" hidden title="Tap to re-centre the tilt"><i id="tiltKnob"></i><span>Tilt to steer · tap to centre</span></div>
@@ -2399,24 +2414,26 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { keys[e.code] = false; stale[e.code] = false; });
 // keys already held at take-off do not flip the bike; press again in the air to flip
 const stale = {};
-function markStale() { for (const k in keys) if (keys[k]) stale[k] = true; if (touch.gas) stale.tgas = true; if (touch.brake) stale.tbrake = true; if (PAD.sy) stale.pad = true; if (TC.gas) stale.sgas = true; if (TC.brake) stale.sbrake = true; }
+function markStale() { for (const k in keys) if (keys[k]) stale[k] = true; if (touch.gas) stale.tgas = true; if (touch.brake) stale.tbrake = true; if (PAD.sy) stale.pad = true; if (TC.gas) stale.sgas = true; if (TC.brake) stale.sbrake = true; if (TP.up) stale.pup = true; if (TP.dn) stale.pdn = true; }
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 function playerInput() {
   const sw = TC.scheme === 'swipe' && document.body.classList.contains('ctl-swipe'), tl = document.body.classList.contains('ctl-tilt');
-  const up = keys.KeyW || keys.ArrowUp || touch.gas || (sw && TC.gas), dn = keys.KeyS || keys.ArrowDown || touch.brake || (sw && TC.brake);
+  const tp = TC.scheme === 'pad' && document.body.classList.contains('ctl-pad');
+  const up = keys.KeyW || keys.ArrowUp || touch.gas || (sw && TC.gas) || (tp && TP.gas), dn = keys.KeyS || keys.ArrowDown || touch.brake || (sw && TC.brake) || (tp && TP.dn);
   const st = ((keys.KeyD || keys.ArrowRight || touch.right) ? 1 : 0) - ((keys.KeyA || keys.ArrowLeft || touch.left) ? 1 : 0);
   const fresh = k => keys[k] && !stale[k];
-  const pu = fresh('KeyW') || fresh('ArrowUp') || (touch.gas && !stale.tgas) || (sw && TC.gas && !stale.sgas), pd = fresh('KeyS') || fresh('ArrowDown') || (touch.brake && !stale.tbrake) || (sw && TC.brake && !stale.sbrake);
+  const pu = fresh('KeyW') || fresh('ArrowUp') || (touch.gas && !stale.tgas) || (sw && TC.gas && !stale.sgas) || (tp && TP.up && !stale.pup), pd = fresh('KeyS') || fresh('ArrowDown') || (touch.brake && !stale.tbrake) || (sw && TC.brake && !stale.sbrake) || (tp && TP.dn && !stale.pdn);
   let pitch = (pu ? 1 : 0) - (pd ? 1 : 0);
   if (PAD.on && PAD.sy && !stale.pad) pitch = -Math.sign(PAD.sy);
-  return { throttle: Math.max(up ? 1 : 0, PAD.gas), brake: dn || PAD.brake > 0.3 ? 1 : 0, steer: clamp(st + PAD.sx + (sw || tl ? TC.steer : 0), -1, 1), pitch: player.air ? pitch : 0,
-    boost: keys.Space || touch.boost || PAD.nitro || performance.now() < TC.boostUntil, wheelie: keys.ShiftLeft || keys.ShiftRight || touch.whl || PAD.wheelie || (sw && TC.whl) };
+  return { throttle: Math.max(up ? 1 : 0, PAD.gas), brake: dn || PAD.brake > 0.3 ? 1 : 0, steer: clamp(st + PAD.sx + (sw || tl ? TC.steer : 0) + (tp ? TP.steer : 0), -1, 1), pitch: player.air ? pitch : 0,
+    boost: keys.Space || touch.boost || PAD.nitro || performance.now() < TC.boostUntil, wheelie: keys.ShiftLeft || keys.ShiftRight || touch.whl || PAD.wheelie || (sw && TC.whl) || (tp && TP.up && !player.air) };
 }
 document.querySelectorAll('#touch button').forEach(b => {
   const k = b.dataset.k;
-  const on = e => { e.preventDefault(); touch[k] = true; b.classList.add('on'); if (k === 'shoveL') shove(player, -1); if (k === 'shoveR') shove(player, 1); if (k === 'trick') startTrick(player); };
+  const on = e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (_) {} touch[k] = true; b.classList.add('on'); if (k === 'shoveL') shove(player, -1); if (k === 'shoveR') shove(player, 1); if (k === 'trick') startTrick(player); };
   const off = e => { touch[k] = false; b.classList.remove('on'); if (k === 'gas') stale.tgas = false; if (k === 'brake') stale.tbrake = false; };
-  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('pointerleave', off);
+  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
+  b.addEventListener('contextmenu', e => e.preventDefault());
 });
 /* ---- Alternative phone controls: tilt to steer, or a swipe pad ----
    Buttons: the on-screen buttons above. Tilt: the phone's tilt steers (◀ ▶ hidden, other buttons stay).
@@ -2425,10 +2442,12 @@ document.querySelectorAll('#touch button').forEach(b => {
    second finger flicked sideways = shove. */
 $('rwBtn').addEventListener('pointerdown', e => { e.preventDefault(); startRewind(); });
 $('phBtn').addEventListener('click', () => { enterPhoto(); $('phBtn').blur(); });
-const TC = { scheme: store.get('rr.touch', 'buttons'), flip: store.get('rr.tiltFlip', false), steer: 0, gas: false, brake: false, whl: false,
+// rr.touch was saved on every visit, so a saved 'buttons' may never have been a choice: phones move to the trackpad
+// unless they picked tilt or the swipe pad. rr.touch2 holds real choices from now on.
+const TC = { scheme: store.get('rr.touch2', null) || ({ tilt: 1, swipe: 1 }[store.get('rr.touch', '')] ? store.get('rr.touch', '') : 'pad'), flip: store.get('rr.tiltFlip', false), steer: 0, gas: false, brake: false, whl: false,
   boostUntil: 0, raw: null, zero: null, tiltSeen: 0, tiltOk: false, listening: false, sid: null, ox: 0, oy: 0, t0: 0, far: 0, lastTap: 0, two: null };
 const isTouchy = () => matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
-const TC_NAMES = { buttons: 'Buttons', tilt: 'Tilt to steer', swipe: 'Swipe pad' };
+const TC_NAMES = { pad: 'Trackpad', buttons: 'Buttons', tilt: 'Tilt to steer', swipe: 'Swipe pad' };
 function tiltAngle(e) {
   const a = (screen.orientation && screen.orientation.angle != null) ? screen.orientation.angle : (window.orientation || 0);
   const g = e.gamma || 0, b = e.beta || 0;
@@ -2449,29 +2468,31 @@ function tiltListen() {
   // iOS (and some newer browsers) only send tilt after asking, from a tap
   try { if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function' && !TC.asked) { TC.asked = true; DeviceOrientationEvent.requestPermission().then(s => { if (s !== 'granted') TC.asked = false; }).catch(() => { TC.asked = false; }); } } catch (e) {}
 }
-function hideAltControls() { $('swipe').hidden = true; $('tiltBar').hidden = true; $('ctlRace').hidden = true; $('swipeHint').hidden = true; TC.sid = null; TC.steer = 0; TC.gas = TC.brake = TC.whl = false; }
+function hideAltControls() { $('swipe').hidden = true; $('tpad').hidden = true; tpReset(); $('tiltBar').hidden = true; $('ctlRace').hidden = true; $('swipeHint').hidden = true; TC.sid = null; TC.steer = 0; TC.gas = TC.brake = TC.whl = false; }
 function tiltRecenter() { TC.zero = TC.raw; TC.steer = 0; }
 // called from startRace / startFree (a tap, so iOS can ask for the sensor)
 function applyControls(touchy) {
   const s = touchy ? TC.scheme : 'buttons';
-  document.body.classList.toggle('ctl-tilt', s === 'tilt'); document.body.classList.toggle('ctl-swipe', s === 'swipe');
-  $('touch').hidden = !touchy || s === 'swipe';
-  $('swipe').hidden = !(touchy && s === 'swipe'); $('tiltBar').hidden = !(touchy && s === 'tilt');
-  $('ctlRace').hidden = !touchy; $('ctlRace').textContent = s === 'tilt' ? '📱' : s === 'swipe' ? '👆' : '🎮';
+  document.body.classList.toggle('ctl-tilt', s === 'tilt'); document.body.classList.toggle('ctl-swipe', s === 'swipe'); document.body.classList.toggle('ctl-pad', s === 'pad');
+  $('touch').hidden = !touchy || s === 'swipe' || s === 'pad';
+  $('swipe').hidden = !(touchy && s === 'swipe'); $('tpad').hidden = !(touchy && s === 'pad'); tpReset(); $('tiltBar').hidden = !(touchy && s === 'tilt');
+  $('ctlRace').hidden = !touchy; $('ctlRace').textContent = s === 'tilt' ? '📱' : s === 'swipe' ? '👆' : s === 'pad' ? '✌️' : '🎮';
   TC.steer = 0; TC.gas = TC.brake = TC.whl = false; TC.sid = null; TC.two = null; $('stick').hidden = true;
   if (s === 'tilt') {
     tiltListen(); TC.zero = TC.raw; const t0 = performance.now();
     setTimeout(() => {
       if (TC.scheme === 'tilt' && TC.tiltSeen < t0 && mode !== 'editor' && document.body.classList.contains('ctl-tilt')) { toast('No tilt sensor here, so steering is on the ◀ ▶ buttons'); document.body.classList.remove('ctl-tilt'); $('tiltBar').hidden = true; } }, 1600);
   }
+  if (s === 'pad') { const ls = document.querySelectorAll('#tpad .tl'); ls.forEach(l => l.style.opacity = 1); clearTimeout(TC.hintT); TC.hintT = setTimeout(() => ls.forEach(l => l.style.opacity = 0), 7000); }
   if (s === 'swipe') { const h = $('swipeHint'); h.hidden = false; h.style.opacity = 1; clearTimeout(TC.hintT); TC.hintT = setTimeout(() => { h.style.opacity = 0; }, 6000); }
 }
 function setScheme(s) {
-  TC.scheme = s; store.set('rr.touch', s); if ($('touchSel')) $('touchSel').value = s;
+  TC.scheme = s; store.set('rr.touch', s); store.set('rr.touch2', s); if ($('touchSel')) $('touchSel').value = s;
   $('tiltFlipRow').hidden = s !== 'tilt'; $('touchHint').innerHTML = TC_HINT[s];
   if (mode !== 'editor' && mode !== 'replay') { applyControls(isTouchy()); toast('Controls: ' + TC_NAMES[s]); }
 }
 const TC_HINT = {
+  pad: 'Two thumbs, no buttons. Left half: put your thumb anywhere and slide sideways to steer, flick to shove. Right half: hold for gas, slide down to brake, slide up for a wheelie. In the air slide up or down to flip and tap for a trick. Double tap the right side for nitro.',
   buttons: 'On-screen buttons for steering, gas, brake, nitro, tricks, wheelie and shove.',
   tilt: 'Tilt the phone like a steering wheel. It sets the middle when the race starts, and tapping the tilt bar resets it. The other buttons stay.',
   swipe: 'No buttons. Put a finger anywhere and drag: up is gas, down is brake, sideways steers. In the air drag up or down to flip, tap for a trick. Double tap for nitro, hold a second finger for a wheelie, flick a second finger sideways to shove.',
@@ -2519,7 +2540,67 @@ const TC_HINT = {
   };
   pad.addEventListener('pointerup', up); pad.addEventListener('pointercancel', up);
   $('tiltBar').addEventListener('pointerdown', e => { e.preventDefault(); tiltRecenter(); toast('Tilt centred'); });
-  $('ctlRace').addEventListener('click', () => { const o = ['buttons', 'tilt', 'swipe']; setScheme(o[(o.indexOf(TC.scheme) + 1) % 3]); });
+  $('ctlRace').addEventListener('click', () => { const o = ['pad', 'buttons', 'tilt', 'swipe']; setScheme(o[(o.indexOf(TC.scheme) + 1) % o.length]); });
+})();
+
+/* ---- Trackpad (default on touch screens): two thumbs, no buttons ----
+   Left half: thumb down anywhere, slide sideways to steer (relative to where it landed, like a laptop trackpad);
+   a quick sideways flick shoves. Right half: holding is gas, slide down = brake, slide up = wheelie on the ground;
+   in the air slide up/down = front/back flip, tap = trick. Double tap on the right = nitro. */
+const TP = { L: null, R: null, steer: 0, gas: false, up: false, dn: false, lastTap: 0 };
+function tpReset() {
+  TP.L = TP.R = null; TP.steer = 0; TP.gas = TP.up = TP.dn = false; stale.pup = stale.pdn = false;
+  document.querySelectorAll('#tpad .ring').forEach(r => { r.hidden = true; r.className = 'ring'; });
+}
+(() => {
+  const pad = $('tpad'), zl = pad.querySelector('.tz.l'), zr = pad.querySelector('.tz.r');
+  const ringL = zl.querySelector('.ring'), ringR = zr.querySelector('.ring');
+  const place = (ring, f, dx, dy) => {
+    const box = ring.parentNode.getBoundingClientRect();
+    ring.style.left = (f.ox - box.left) + 'px'; ring.style.top = (f.oy - box.top) + 'px';
+    const L = Math.hypot(dx, dy), k = Math.min(1, 26 / Math.max(1, L)); ring.firstChild.style.transform = `translate(${dx * k}px,${dy * k}px)`;
+  };
+  pad.addEventListener('contextmenu', e => e.preventDefault());
+  pad.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    const right = e.clientX >= innerWidth / 2, side = right ? 'R' : 'L';
+    if (TP[side]) return; // one thumb per side
+    try { pad.setPointerCapture(e.pointerId); } catch (_) {}
+    TP[side] = { id: e.pointerId, ox: e.clientX, oy: e.clientY, t0: e.timeStamp, far: 0, shoved: false };
+    const ring = right ? ringR : ringL; ring.hidden = false; place(ring, TP[side], 0, 0);
+    if (right) { TP.gas = true; ring.className = 'ring g'; }
+  });
+  pad.addEventListener('pointermove', e => {
+    const f = TP.L && TP.L.id === e.pointerId ? TP.L : TP.R && TP.R.id === e.pointerId ? TP.R : null; if (!f) return;
+    let dx = e.clientX - f.ox, dy = e.clientY - f.oy; f.far = Math.max(f.far, Math.hypot(dx, dy));
+    if (f === TP.L) {
+      if (Math.abs(dx) > 90) { const m = dx - Math.sign(dx) * 90; f.ox += m; dx -= m; } // origin follows the thumb, so reversing is instant
+      const ax = Math.abs(dx) < 6 ? 0 : dx - Math.sign(dx) * 6;
+      TP.steer = clamp(ax / 50, -1, 1);
+      if (!f.shoved && Math.abs(dx) > 60 && e.timeStamp - f.t0 < 180 && player) { f.shoved = true; shove(player, Math.sign(dx)); }
+      place(ringL, f, dx, 0);
+    } else {
+      if (Math.abs(dy) > 70) { const m = dy - Math.sign(dy) * 70; f.oy += m; dy -= m; }
+      const u = dy < -26, d = dy > 26;
+      if (!u) stale.pup = false; if (!d) stale.pdn = false;
+      TP.up = u; TP.dn = d; TP.gas = !d;
+      ringR.className = 'ring ' + (d ? 'b' : u ? 'u' : 'g');
+      place(ringR, f, 0, dy);
+    }
+  });
+  const up = e => {
+    if (TP.L && TP.L.id === e.pointerId) { TP.L = null; TP.steer = 0; ringL.hidden = true; }
+    else if (TP.R && TP.R.id === e.pointerId) {
+      const now = e.timeStamp, f = TP.R; // event times, so a slow frame can't turn a tap into a hold
+      if (now - f.t0 < 230 && f.far < 14 && player) {
+        if (player.air) startTrick(player);
+        else if (now - TP.lastTap < 340) { TC.boostUntil = performance.now() + 1100; TP.lastTap = 0; }
+        else TP.lastTap = now;
+      }
+      TP.R = null; TP.gas = TP.up = TP.dn = false; stale.pup = stale.pdn = false; ringR.hidden = true;
+    }
+  };
+  pad.addEventListener('pointerup', up); pad.addEventListener('pointercancel', up);
 })();
 
 /* ================= Gamepad =================
@@ -4132,6 +4213,7 @@ function updateEditorCam(dt) {
    reports events (landings, loops, shoves, stars...) through TUT.ev. Events count from
    the start of the chapter, so doing things out of order still ticks them off. */
 const TOUCH_WORDS = {
+  pad: { gas: 'hold the right side on touch', steer: 'slide the left thumb sideways on touch', brake: 'slide the right thumb down on touch', nitro: 'double tap the right side on touch', wheelie: 'slide the right thumb up on touch', flip: 'slide the right thumb up or down on touch', trick: 'tap the right side on touch', shove: 'flick the left thumb sideways' },
   buttons: { gas: 'GAS on touch', steer: '◀ ▶ on touch', brake: 'BRK on touch', nitro: 'N₂O on touch', wheelie: 'WHL on touch', flip: 'GAS or BRK on touch', trick: '★ on touch', shove: 'use ⇤ ⇥' },
   tilt: { gas: 'GAS on touch', steer: 'tilt the phone', brake: 'BRK on touch', nitro: 'N₂O on touch', wheelie: 'WHL on touch', flip: 'GAS or BRK on touch', trick: '★ on touch', shove: 'use ⇤ ⇥' },
   swipe: { gas: 'drag up on touch', steer: 'drag sideways on touch', brake: 'drag down on touch', nitro: 'double tap on touch', wheelie: 'hold a second finger on touch', flip: 'drag up or down on touch', trick: 'tap on touch', shove: 'flick a second finger sideways' },
